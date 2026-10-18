@@ -4106,7 +4106,7 @@ EPILOG = """\
   L4  TCP(실패 유형 · IPv4/IPv6 · MSS · TCP 홉 거리)
   L4b 목적지 정보(소유자·abuse 연락처·RPKI)
   L5  TLS(인증서·SNI)       L5b 인증서 이력(CT 로그)
-  L6  HTTP(리다이렉트·중간 경유)
+  L6  HTTP(리다이렉트·중간 경유)  L6b URL 변형(https·http × www)
   L7  경로(AS·손실·PTR·역방향)  L7b 정상 대조군과 경로 비교
   L8  PMTU                 L9  대조군
 
