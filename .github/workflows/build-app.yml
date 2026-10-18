@@ -1,0 +1,81 @@
+# netcheck 데스크톱 앱 빌드 — Windows · macOS · Linux 실행 파일을 각 OS 러너에서 생성
+# PyInstaller 는 교차 빌드가 안 되므로 OS 별 러너에서 각각 빌드한다.
+# 실행: GitHub Actions 탭에서 수동 실행(workflow_dispatch) 또는 v* 태그 push.
+name: build-app
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+env:
+  PYTHONUTF8: "1"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows-x64 }
+          - { os: macos-14,       name: macos-arm64 }    # Apple Silicon
+          - { os: macos-15-intel, name: macos-x64 }      # Intel
+          - { os: ubuntu-22.04,   name: linux-x64 }      # glibc 2.35 기준 (구형 배포판 호환)
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Linux 웹뷰(GTK) 의존성
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config gir1.2-webkit2-4.1
+          pip install "PyGObject<3.51"
+
+      - name: 빌드 도구 설치
+        run: pip install -r tools/requirements-app.txt
+
+      - name: 판정 시험
+        run: python tools/test_verdicts.py
+
+      - name: 빌드
+        run: python tools/build-app.py
+
+      - name: 실행 확인 (macOS)
+        timeout-minutes: 5
+        if: runner.os == 'macOS'
+        run: dist/netcheck.app/Contents/MacOS/netcheck --selftest
+
+      - name: 실행 확인 (Linux)
+        timeout-minutes: 5
+        if: runner.os == 'Linux'
+        run: dist/netcheck --selftest
+
+      - name: 실행 확인 (Windows)
+        timeout-minutes: 5
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\netcheck.exe -ArgumentList "--selftest" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { exit $p.ExitCode }
+
+      - name: 패키징 (macOS .app → zip)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/netcheck.app dist/netcheck-${{ matrix.name }}.zip
+
+      - name: 패키징 (Linux, 실행 권한 유지)
+        if: runner.os == 'Linux'
+        run: tar -C dist -czf dist/netcheck-${{ matrix.name }}.tar.gz netcheck
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: netcheck-${{ matrix.name }}
+          path: |
+            dist/netcheck.exe
+            dist/netcheck-*.zip
+            dist/netcheck-*.tar.gz
+          if-no-files-found: error
